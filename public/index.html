@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unduh Konten TikTok</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef2f7;--ink:#14213d;--muted:#5b6784;--card:#fff;--line:#d5dce8;--accent:#ff3d6e;--accent-ink:#fff;--err:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1424;--ink:#eef2f7;--muted:#9aa6c2;--card:#18213a;--line:#2a3556;--accent:#ff5c85;--accent-ink:#14213d;--err:#ff8a80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Bricolage Grotesque',system-ui,sans-serif;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:48px 20px 64px}
+h1{font-size:clamp(2rem,8vw,3.2rem);line-height:1.05;font-weight:800;margin:0 0 12px;letter-spacing:-.02em}
+.sub{color:var(--muted);margin:0 0 28px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input{flex:1 1 220px;min-width:0;padding:14px 16px;font:inherit;color:var(--ink);background:var(--card);border:2px solid var(--line);border-radius:12px}
+input:focus{outline:3px solid var(--accent);outline-offset:1px;border-color:transparent}
+button,.btn{font:inherit;font-weight:600;padding:14px 20px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);cursor:pointer;text-decoration:none;display:inline-block;text-align:center}
+button.ghost{background:var(--card);color:var(--ink);border:2px solid var(--line)}
+button:focus-visible,.btn:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+button:disabled{opacity:.6;cursor:wait}
+#msg{min-height:1.5em;margin:14px 0 0;color:var(--err);font-weight:600}
+#result{margin-top:24px}
+.card{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:16px}
+.meta{margin:0 0 4px;font-weight:600}
+.cap{margin:0 0 16px;color:var(--muted);overflow-wrap:anywhere}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.grid a{display:block;border-radius:10px;overflow:hidden;border:2px solid var(--line);aspect-ratio:3/4;background:var(--bg)}
+.grid img{width:100%;height:100%;object-fit:cover;display:block}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.note{color:var(--muted);font-size:.85rem;margin-top:32px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Unduh foto dan video TikTok</h1>
+  <p class="sub">Tempel link TikTok, lalu simpan filenya ke perangkat Anda.</p>
+  <div class="row">
+    <input id="url" type="url" inputmode="url" placeholder="https://www.tiktok.com/@akun/photo/123…" aria-label="Link TikTok" autocomplete="off">
+    <button id="paste" class="ghost" type="button">Tempel</button>
+    <button id="go" type="button">Ambil file</button>
+  </div>
+  <p id="msg" role="alert"></p>
+  <div id="result"></div>
+  <p class="note">Unduh hanya konten milik Anda atau yang sudah mendapat izin pemiliknya.</p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const dl = (it, id, inline) => `/api/download?u=${encodeURIComponent(it.url)}&name=${encodeURIComponent(it.name)}&id=${id}${inline ? '&inline=1' : ''}`;
+
+$('paste').onclick = async () => {
+  try { $('url').value = await navigator.clipboard.readText(); } catch { $('msg').textContent = 'Izin tempel ditolak. Tempel manual di kolom.'; }
+};
+$('url').addEventListener('keydown', e => { if (e.key === 'Enter') $('go').click(); });
+
+$('go').onclick = async () => {
+  const link = $('url').value.trim();
+  $('msg').textContent = ''; $('result').replaceChildren();
+  if (!link) { $('msg').textContent = 'Tempel link TikTok dulu.'; return; }
+  $('go').disabled = true; $('go').textContent = 'Memuat…';
+  try {
+    const r = await fetch('/api/info?url=' + encodeURIComponent(link));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Gagal mengambil data.');
+    render(d);
+  } catch (e) {
+    $('msg').textContent = e.message;
+  } finally {
+    $('go').disabled = false; $('go').textContent = 'Ambil file';
+  }
+};
+
+function render(d) {
+  const card = document.createElement('div'); card.className = 'card';
+  const who = document.createElement('p'); who.className = 'meta'; who.textContent = '@' + d.author;
+  const cap = document.createElement('p'); cap.className = 'cap'; cap.textContent = d.title;
+  card.append(who, cap);
+  if (d.type === 'photo') {
+    const grid = document.createElement('div'); grid.className = 'grid';
+    d.items.forEach((it, i) => {
+      const a = document.createElement('a'); a.href = dl(it, d.id); a.setAttribute('aria-label', 'Unduh foto ' + (i + 1));
+      const img = document.createElement('img'); img.src = dl(it, d.id, true); img.alt = 'Foto ' + (i + 1); img.loading = 'lazy';
+      a.append(img); grid.append(a);
+    });
+    card.append(grid);
+  }
+  const act = document.createElement('div'); act.className = 'actions';
+  if (d.type === 'photo' && d.items.length > 1) {
+    const all = document.createElement('button'); all.textContent = 'Unduh semua foto (' + d.items.length + ')';
+    all.onclick = () => d.items.forEach((it, i) => setTimeout(() => { const a = document.createElement('a'); a.href = dl(it, d.id); a.click(); }, i * 600));
+    act.append(all);
+  } else {
+    const a = document.createElement('a'); a.className = 'btn'; a.href = dl(d.items[0], d.id);
+    a.textContent = d.type === 'photo' ? 'Unduh foto' : 'Unduh video';
+    act.append(a);
+  }
+  card.append(act); $('result').append(card);
+}
+</script>
+</body>
+</html>
